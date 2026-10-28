@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual Plant Growth Lab - Soil pH</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    margin: 0;
+    padding: 16px;
+  }
+  .lab-console {
+    width: 100%;
+    max-width: 1000px;
+    background: linear-gradient(135deg, #10344b 0%, #1c5270 50%, #447b99 100%);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    color: #ffffff;
+  }
+  .lab-header {
+    text-align: center;
+    font-weight: bold;
+    font-size: 22px;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+
+  /* Challenge strip */
+  .challenge {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    background-color: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+  .challenge-text { flex: 1 1 260px; }
+  .challenge-status { font-weight: bold; min-width: 150px; }
+  .challenge-status.hit { color: #a3e6a6; }
+
+  /* Chamber */
+  .chamber {
+    background-color: #ffffff;
+    border-radius: 10px;
+    padding: 15px;
+    color: #333;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+  }
+  .chamber-header {
+    font-weight: bold;
+    font-size: 18px;
+    text-align: center;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    text-transform: uppercase;
+    transition: background-color .3s, color .3s;
+  }
+  .chamber.acidic .chamber-header { background-color: #f9e28e; color: #6f5412; }
+  .chamber.neutral .chamber-header { background-color: #a3d9a5; color: #1f5224; }
+  .chamber.alkaline .chamber-header { background-color: #c4d9e0; color: #36586a; }
+
+  .chamber-content { display: flex; gap: 16px; margin-bottom: 14px; }
+  .plant-illustration {
+    flex: 1 1 55%;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    background-color: #f8f8f8;
+    overflow: hidden;
+  }
+  .plant-illustration svg { display: block; width: 100%; height: auto; }
+  .side-panel { flex: 1 1 45%; display: flex; flex-direction: column; gap: 14px; }
+  .annotations { font-size: 14px; }
+  .annotation-point { position: relative; margin-bottom: 9px; padding-left: 18px; }
+  .annotation-point::before {
+    content: '';
+    position: absolute; left: 0; top: 5px;
+    width: 9px; height: 9px;
+    background-color: #888; border-radius: 50%;
+  }
+  .growth-line { font-size: 14px; font-weight: bold; }
+  .growth-meter { height: 10px; background: #e3e3e3; border-radius: 5px; overflow: hidden; margin-top: 4px; }
+  .growth-meter > div { height: 100%; background: #4caf50; border-radius: 5px; transition: width .2s, background-color .2s; }
+
+  .nutrients-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #555; margin-bottom: 6px; }
+  .nutrient-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12px; }
+  .nutrient-name { width: 98px; flex: none; }
+  .nutrient-bar { flex: 1; height: 10px; background: #e3e3e3; border-radius: 5px; overflow: hidden; }
+  .nutrient-bar > div { height: 100%; border-radius: 5px; transition: width .2s, background-color .2s; }
+  .nutrient-val { width: 34px; text-align: right; flex: none; color: #555; }
+
+  .description-text { font-size: 13px; line-height: 1.45; color: #555; text-align: center; }
+
+  /* Data log */
+  .data-log {
+    background-color: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+  .data-log-title {
+    display: flex; justify-content: space-between; align-items: center;
+    font-weight: bold; margin-bottom: 10px; text-transform: uppercase;
+  }
+  .table-wrap { overflow-x: auto; }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .data-table th, .data-table td {
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 8px;
+    text-align: center;
+  }
+  .data-table th { background-color: rgba(255,255,255,0.15); text-transform: uppercase; }
+  .data-table td.empty { color: #cfdde6; font-style: italic; }
+
+  /* Selector bar (the pH meter) */
+  .selector-bar {
+    position: sticky;
+    bottom: 10px;
+    z-index: 5;
+    background-color: #17435d;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 8px;
+    padding: 12px 20px 8px;
+    margin-bottom: 14px;
+    box-shadow: 0 -4px 14px rgba(0,0,0,0.25);
+  }
+  .selector-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .selector-controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+  .ph-readout {
+    font-size: 20px; font-weight: bold;
+    background: rgba(255,255,255,0.12);
+    border-radius: 6px;
+    padding: 3px 12px;
+    min-width: 92px; text-align: center;
+  }
+  .lab-button {
+    background-color: #33a6b8;
+    color: white;
+    border: none;
+    padding: 7px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+  .lab-button:hover { background-color: #2a8e9f; }
+  .lab-button.secondary { background-color: rgba(255,255,255,0.18); }
+  .lab-button.secondary:hover { background-color: rgba(255,255,255,0.3); }
+  .lab-button:focus-visible { outline: 3px solid #ffd54f; outline-offset: 2px; }
+
+  .slider-wrap { padding: 0 14px; touch-action: none; }
+  .slider-bar {
+    height: 10px;
+    background: linear-gradient(to right, #e53935 0%, #ff9800 20%, #ffeb3b 36%, #4caf50 60%, #2196f3 80%, #9c27b0 100%);
+    border-radius: 5px;
+    position: relative;
+    cursor: pointer;
+  }
+  .slider-handle {
+    width: 28px; height: 28px;
+    background-color: #fff;
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    border: 3px solid #ccc;
+    cursor: grab;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  }
+  .slider-handle.active { border-color: #ff5722; cursor: grabbing; }
+  .slider-handle:focus-visible { outline: 3px solid #ffd54f; outline-offset: 2px; border-color: #ff5722; }
+  .ticks { position: relative; height: 22px; margin-top: 12px; }
+  .tick { position: absolute; transform: translateX(-50%); font-size: 11px; color: #d6e3ea; text-align: center; }
+  .tick::before { content: ''; display: block; width: 1px; height: 5px; background: #9db8c7; margin: 0 auto 2px; }
+
+  .footer-info { text-align: right; font-size: 11px; color: #d6e3ea; font-style: italic; }
+
+  @media (max-width: 720px) {
+    .chamber-content { flex-direction: column; }
+    .lab-header { font-size: 18px; }
+    .selector-bar { padding: 10px 12px 6px; }
+    .slider-wrap { padding: 0 12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="lab-console">
+  <div class="lab-header">Virtual Lab: Understanding Plant Growth Across Different Soil pH</div>
+
+  <div class="challenge">
+    <div class="challenge-text" id="challengeText">Drag the pH meter at the bottom of the screen to change the soil pH and watch how the plant responds.</div>
+    <div class="challenge-status" id="challengeStatus" aria-live="polite"></div>
+    <button class="lab-button secondary" id="newChallenge" type="button">New challenge</button>
+  </div>
+
+  <div class="chamber neutral" id="chamber">
+    <div class="chamber-header" id="chamberHeader">Near-neutral soil (pH 7.0)</div>
+    <div class="chamber-content">
+      <div class="plant-illustration">
+        <svg id="plantSvg" viewBox="0 0 240 260" role="img" aria-label="Plant at the selected soil pH"></svg>
+      </div>
+      <div class="side-panel">
+        <div class="annotations" id="annotations"></div>
+        <div>
+          <div class="growth-line">Relative growth: <span id="growthPct">100%</span></div>
+          <div class="growth-meter"><div id="growthBar"></div></div>
+        </div>
+        <div>
+          <div class="nutrients-title">Nutrient availability to roots</div>
+          <div id="nutrients"></div>
+        </div>
+      </div>
+    </div>
+    <div class="description-text" id="description"></div>
+  </div>
+
+  <div class="data-log">
+    <div class="data-log-title">
+      <span>Data log</span>
+      <button class="lab-button secondary" id="clearLog" type="button">Clear log</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr><th>#</th><th>Soil pH</th><th>Leaf appearance</th><th>Relative growth</th><th>Limiting factors</th></tr>
+        </thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="selector-bar">
+    <div class="selector-top">
+      <div class="selector-controls">
+        <button class="lab-button secondary" type="button" data-ph="5">Acidic 5.0</button>
+        <button class="lab-button secondary" type="button" data-ph="7">Neutral 7.0</button>
+        <button class="lab-button secondary" type="button" data-ph="8">Alkaline 8.0</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="ph-readout" id="phReadout" aria-hidden="true">pH 7.0</div>
+      <button class="lab-button" id="recordBtn" type="button">Record reading</button>
+    </div>
+    <div class="slider-wrap">
+      <div class="slider-bar" id="sliderBar">
+        <div class="slider-handle" id="sliderHandle" tabindex="0" role="slider"
+             aria-label="Soil pH" aria-valuemin="4" aria-valuemax="9" aria-valuenow="7" aria-valuetext="pH 7.0"></div>
+      </div>
+      <div class="ticks" id="ticks"></div>
+    </div>
+  </div>
+
+  <div class="footer-info">Simplified model of general trends in nutrient availability. Real soils and plant species vary. Drag the circle, or focus it and use the arrow keys.</div>
+</div>
+
+<script>
+(function () {
+  var MIN = 4, MAX = 9, STEP = 0.1;
+  var ph = 7.0;
+
+  /* ---------- helpers ---------- */
+  function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+  function interp(table, x) {
+    if (x <= table[0][0]) return table[0][1];
+    for (var i = 1; i < table.length; i++) {
+      if (x <= table[i][0]) {
+        var x0 = table[i-1][0], y0 = table[i-1][1], x1 = table[i][0], y1 = table[i][1];
+        return y0 + (y1 - y0) * (x - x0) / (x1 - x0);
+      }
+    }
+    return table[table.length - 1][1];
+  }
+  function rgb(h) { return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+  function mix(a, b, t) { t = clamp(t, 0, 1); return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]; }
+  function css(c) { return 'rgb(' + Math.round(c[0]) + ',' + Math.round(c[1]) + ',' + Math.round(c[2]) + ')'; }
+
+  /* ---------- data tables (pH, value) ---------- */
+  var GROWTH = [[4,25],[5,50],[5.5,70],[6,92],[6.5,100],[7,100],[7.5,90],[8,70],[8.5,55],[9,40]];
+  var ROOT   = [[4,0.35],[5,0.6],[6,0.92],[6.5,1],[7,1],[8,0.85],[9,0.65]];
+  var NUTRIENTS = [
+    { name: 'Nitrogen (N)',    t: [[4,40],[5,55],[5.5,75],[6,95],[7,100],[8,95],[9,85]] },
+    { name: 'Phosphorus (P)',  t: [[4,15],[5,35],[5.5,55],[6,80],[6.5,100],[7,95],[7.5,70],[8,45],[9,25]] },
+    { name: 'Potassium (K)',   t: [[4,40],[5,55],[6,80],[6.5,95],[7,100],[8,100],[9,95]] },
+    { name: 'Iron (Fe)',       t: [[4,100],[5,100],[6,90],[6.5,75],[7,55],[7.5,40],[8,25],[9,10]] },
+    { name: 'Manganese (Mn)',  t: [[4,100],[5,95],[5.5,85],[6,70],[6.5,55],[7,40],[8,18],[9,8]] },
+    { name: 'Aluminum risk',   t: [[4,100],[4.5,85],[5,60],[5.5,20],[6,0],[9,0]], risk: true }
+  ];
+
+  /* ---------- zones ---------- */
+  function zoneFor(p) {
+    if (p < 5.0) return {
+      name: 'Strongly acidic', cls: 'acidic',
+      notes: ['Stunted growth', 'Yellowing of older leaves (Mg, Ca, P deficiency)', 'Short, stubby, brown roots (aluminum toxicity)'],
+      desc: 'Very acidic soil can release toxic levels of aluminum and manganese, while phosphorus, calcium, and magnesium become hard for roots to take up. Roots stay short and the whole plant is stunted.'
+    };
+    if (p < 6.0) return {
+      name: 'Acidic', cls: 'acidic',
+      notes: ['Chlorotic leaves (yellowing)', 'Limited nutrient uptake', 'Slowed root growth'],
+      desc: 'Acidic soils can cause nutrient deficiencies (e.g., Mg, P) and aluminum toxicity, restricting overall plant development.'
+    };
+    if (p < 7.5) return {
+      name: 'Near-neutral', cls: 'neutral',
+      notes: ['Vigorous growth', 'Healthy dark green leaves', 'Abundant yields'],
+      desc: 'Neutral pH is typically ideal for the availability of essential plant nutrients (N, P, K, Ca, Mg), promoting balanced and maximal growth.'
+    };
+    if (p < 8.5) return {
+      name: 'Alkaline', cls: 'alkaline',
+      notes: ['Interveinal chlorosis (iron deficiency)', 'Reduced trace element availability', 'Moderated growth'],
+      desc: 'In alkaline soil, iron, manganese, and zinc form compounds that roots cannot absorb. New leaves turn pale between the veins and growth slows.'
+    };
+    return {
+      name: 'Strongly alkaline', cls: 'alkaline',
+      notes: ['Severe interveinal chlorosis in young leaves', 'Fe, Mn, and Zn largely unavailable', 'Poor growth and stunted shoots'],
+      desc: 'Very alkaline soil locks up most micronutrients and phosphorus. Young leaves show severe yellowing between green veins, and shoots and roots grow poorly.'
+    };
+  }
+
+  /* ---------- plant drawing ---------- */
+  var GREEN = rgb('#2f7d32'), YELLOW = rgb('#d9c23f'), PALE = rgb('#cfe08a');
+  var SOIL_N = rgb('#8b6b3e'), SOIL_A = rgb('#6c4528'), SOIL_B = rgb('#a89478');
+  var ROOT_OK = rgb('#e0d2b0'), ROOT_BAD = rgb('#5e3c1e');
+  var BASE_Y = 205;
+
+  function drawPlant(p) {
+    var g = interp(GROWTH, p) / 100;
+    var rootF = interp(ROOT, p);
+    var stress = 1 - g;
+    var acidAmt = clamp((6.0 - p) / 1.5, 0, 1);
+    var alkAmt = clamp((p - 7.2) / 1.6, 0, 1);
+    var stemH = 30 + 130 * g;
+    var lean = stress * 16;
+    var topY = BASE_Y - stemH;
+    var s = '';
+
+    /* soil */
+    var soil = p < 7 ? mix(SOIL_N, SOIL_A, (7 - p) / 3) : mix(SOIL_N, SOIL_B, (p - 7) / 2);
+    s += '<rect x="0" y="' + BASE_Y + '" width="240" height="55" fill="' + css(soil) + '"/>';
+    for (var d = 0; d < 14; d++) {
+      s += '<circle cx="' + (12 + d * 17) + '" cy="' + (BASE_Y + 8 + (d * 11) % 40) + '" r="1.6" fill="rgba(0,0,0,0.18)"/>';
+    }
+
+    /* roots */
+    var rootCol = css(mix(ROOT_OK, ROOT_BAD, acidAmt));
+    var L = 10 + 40 * rootF;
+    var tw = 2.4 + 2.6 * acidAmt;
+    s += '<path d="M120,' + BASE_Y + ' L120,' + (BASE_Y + L) + '" stroke="' + rootCol + '" stroke-width="' + tw + '" stroke-linecap="round" fill="none"/>';
+    var fr = [0.3, 0.55, 0.8];
+    for (var r = 0; r < fr.length; r++) {
+      var ry = BASE_Y + L * fr[r];
+      var ll = (6 + 28 * rootF) * (1 - 0.3 * acidAmt) * (1 - r * 0.2);
+      for (var sd = -1; sd <= 1; sd += 2) {
+        s += '<path d="M120,' + ry + ' L' + (120 + sd * ll) + ',' + (ry + ll * 0.5) + '" stroke="' + rootCol + '" stroke-width="' + (tw * 0.6) + '" stroke-linecap="round" fill="none"/>';
+      }
+    }
+
+    /* stem */
+    s += '<path d="M120,' + BASE_Y + ' Q120,' + (BASE_Y - stemH / 2) + ' ' + (120 + lean) + ',' + topY +
+         '" stroke="#3d7a35" stroke-width="' + (3 + 2 * g) + '" fill="none" stroke-linecap="round"/>';
+
+    /* leaves (oldest at the bottom, youngest at the top) */
+    var n = clamp(Math.round(2 + 4 * g), 3, 6);
+    var base = 0.55 + 0.65 * g;
+    for (var i = 0; i < n; i++) {
+      var a = i / (n - 1);
+      var t = 0.18 + 0.8 * a;
+      var x = 120 + lean * t * t;
+      var y = BASE_Y - stemH * t;
+      var side = (i % 2 === 0) ? 1 : -1;
+      var ang = 40 - 75 * stress;
+      var sz = base * (1.1 - 0.3 * a);
+
+      var col = mix(GREEN, YELLOW, acidAmt * (1 - a * 0.6) * 0.95);
+      var chlor = alkAmt * (0.35 + 0.65 * a);
+      col = mix(col, PALE, chlor * 0.9);
+      var edge = (acidAmt > 0.6 && a < 0.5) ? '#8a5a1f' : css(mix(col, [0,0,0], 0.3));
+      var veinOpacity = 0.35 + 0.65 * chlor;
+
+      s += '<g transform="translate(' + x.toFixed(1) + ',' + y.toFixed(1) + ') scale(' + side + ',1) rotate(' + (-ang).toFixed(1) + ') scale(' + sz.toFixed(2) + ')">' +
+           '<path d="M0,0 C10,-14 34,-14 46,0 C34,14 10,14 0,0 Z" fill="' + css(col) + '" stroke="' + edge + '" stroke-width="1.2"/>' +
+           '<g stroke="#1f6b2a" stroke-width="1.6" fill="none" stroke-linecap="round" opacity="' + veinOpacity.toFixed(2) + '">' +
+           '<path d="M2,0 L43,0"/>' +
+           '<path d="M10,0 L20,-8 M10,0 L20,8 M22,0 L32,-7 M22,0 L32,7"/>' +
+           '</g></g>';
+    }
+
+    /* flower when plant is thriving */
+    if (g >= 0.85) {
+      var fx = 120 + lean, fy = topY - 6;
+      var fo = clamp((g - 0.85) / 0.15, 0.4, 1);
+      s += '<g opacity="' + fo.toFixed(2) + '">';
+      for (var k = 0; k < 5; k++) {
+        var th = k * 72 * Math.PI / 180;
+        s += '<circle cx="' + (fx + 7 * Math.sin(th)).toFixed(1) + '" cy="' + (fy - 7 * Math.cos(th)).toFixed(1) + '" r="5" fill="#f4a6c0"/>';
+      }
+      s += '<circle cx="' + fx + '" cy="' + fy + '" r="4" fill="#f9d648"/></g>';
+    }
+    return s;
+  }
+
+  /* ---------- UI updates ---------- */
+  var el = {
+    chamber: document.getElementById('chamber'),
+    header: document.getElementById('chamberHeader'),
+    svg: document.getElementById('plantSvg'),
+    notes: document.getElementById('annotations'),
+    growthPct: document.getElementById('growthPct'),
+    growthBar: document.getElementById('growthBar'),
+    nutrients: document.getElementById('nutrients'),
+    desc: document.getElementById('description'),
+    handle: document.getElementById('sliderHandle'),
+    bar: document.getElementById('sliderBar'),
+    readout: document.getElementById('phReadout'),
+    ticks: document.getElementById('ticks'),
+    logBody: document.getElementById('logBody'),
+    chText: document.getElementById('challengeText'),
+    chStatus: document.getElementById('challengeStatus')
+  };
+
+  function leafText(p) {
+    var acidAmt = clamp((6.0 - p) / 1.5, 0, 1);
+    var alkAmt = clamp((p - 7.2) / 1.6, 0, 1);
+    if (acidAmt > 0.15) return 'Yellowing (older leaves)';
+    if (alkAmt > 0.15) return 'Interveinal chlorosis (young leaves)';
+    return 'Healthy, dark green';
+  }
+  function limitingText(p) {
+    var out = [];
+    NUTRIENTS.forEach(function (n) {
+      var v = interp(n.t, p);
+      if (n.risk) { if (v >= 50) out.push('Al toxicity'); }
+      else if (v < 50) out.push(n.name.match(/\((.+)\)/)[1]);
+    });
+    return out.length ? out.join(', ') : 'None';
+  }
+  function nutrientColor(v, risk) {
+    var good = risk ? 100 - v : v;
+    if (good >= 70) return '#4caf50';
+    if (good >= 40) return '#f0b429';
+    return '#e5533d';
+  }
+
+  function render() {
+    var z = zoneFor(ph);
+    var g = Math.round(interp(GROWTH, ph));
+
+    el.chamber.className = 'chamber ' + z.cls;
+    el.header.textContent = z.name + ' soil (pH ' + ph.toFixed(1) + ')';
+    el.svg.innerHTML = drawPlant(ph);
+    el.svg.setAttribute('aria-label', 'Plant at soil pH ' + ph.toFixed(1) + ': ' + z.notes.join('; '));
+
+    el.notes.innerHTML = z.notes.map(function (n) { return '<div class="annotation-point">' + n + '</div>'; }).join('');
+    el.growthPct.textContent = g + '%';
+    el.growthBar.style.width = g + '%';
+    el.growthBar.style.backgroundColor = nutrientColor(g, false);
+
+    el.nutrients.innerHTML = NUTRIENTS.map(function (n) {
+      var v = Math.round(interp(n.t, ph));
+      return '<div class="nutrient-row"><span class="nutrient-name">' + n.name + '</span>' +
+             '<span class="nutrient-bar"><div style="width:' + v + '%;background-color:' + nutrientColor(v, n.risk) + '"></div></span>' +
+             '<span class="nutrient-val">' + v + '%</span></div>';
+    }).join('');
+
+    el.desc.textContent = z.desc;
+
+    var pct = (ph - MIN) / (MAX - MIN) * 100;
+    el.handle.style.left = pct + '%';
+    el.handle.setAttribute('aria-valuenow', ph.toFixed(1));
+    el.handle.setAttribute('aria-valuetext', 'pH ' + ph.toFixed(1) + ', ' + z.name.toLowerCase());
+    el.readout.textContent = 'pH ' + ph.toFixed(1);
+    updateChallengeStatus();
+  }
+
+  function setPh(v) {
+    v = clamp(Math.round(v / STEP) * STEP, MIN, MAX);
+    v = Math.round(v * 10) / 10;
+    if (v === ph) return;
+    ph = v;
+    render();
+  }
+
+  /* ---------- ticks ---------- */
+  for (var tk = MIN; tk <= MAX; tk++) {
+    var d = document.createElement('div');
+    d.className = 'tick';
+    d.style.left = ((tk - MIN) / (MAX - MIN) * 100) + '%';
+    d.textContent = tk;
+    el.ticks.appendChild(d);
+  }
+
+  /* ---------- dragging ---------- */
+  var dragging = false;
+  function phFromEvent(e) {
+    var rect = el.bar.getBoundingClientRect();
+    var f = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+    return MIN + f * (MAX - MIN);
+  }
+  el.bar.addEventListener('pointerdown', function (e) {
+    dragging = true;
+    el.handle.classList.add('active');
+    el.bar.setPointerCapture(e.pointerId);
+    el.handle.focus({ preventScroll: true });
+    setPh(phFromEvent(e));
+    e.preventDefault();
+  });
+  el.bar.addEventListener('pointermove', function (e) { if (dragging) setPh(phFromEvent(e)); });
+  function endDrag(e) {
+    if (!dragging) return;
+    dragging = false;
+    el.handle.classList.remove('active');
+    if (el.bar.hasPointerCapture(e.pointerId)) el.bar.releasePointerCapture(e.pointerId);
+  }
+  el.bar.addEventListener('pointerup', endDrag);
+  el.bar.addEventListener('pointercancel', endDrag);
+
+  el.handle.addEventListener('keydown', function (e) {
+    var k = e.key, v = null;
+    if (k === 'ArrowRight' || k === 'ArrowUp') v = ph + STEP;
+    else if (k === 'ArrowLeft' || k === 'ArrowDown') v = ph - STEP;
+    else if (k === 'PageUp') v = ph + 0.5;
+    else if (k === 'PageDown') v = ph - 0.5;
+    else if (k === 'Home') v = MIN;
+    else if (k === 'End') v = MAX;
+    if (v !== null) { e.preventDefault(); setPh(v); }
+  });
+
+  /* quick-set buttons */
+  Array.prototype.forEach.call(document.querySelectorAll('[data-ph]'), function (b) {
+    b.addEventListener('click', function () { setPh(parseFloat(b.getAttribute('data-ph'))); });
+  });
+
+  /* ---------- data log ---------- */
+  var log = [];
+  function renderLog() {
+    if (!log.length) {
+      el.logBody.innerHTML = '<tr><td class="empty" colspan="5">No readings yet. Move the meter, then press Record reading.</td></tr>';
+      return;
+    }
+    el.logBody.innerHTML = log.map(function (r, i) {
+      return '<tr><td>' + (i + 1) + '</td><td>' + r.ph.toFixed(1) + '</td><td>' + r.leaf + '</td><td>' + r.growth + '%</td><td>' + r.limit + '</td></tr>';
+    }).join('');
+  }
+  document.getElementById('recordBtn').addEventListener('click', function () {
+    if (log.length >= 20) log.shift();
+    log.push({ ph: ph, leaf: leafText(ph), growth: Math.round(interp(GROWTH, ph)), limit: limitingText(ph) });
+    renderLog();
+  });
+  document.getElementById('clearLog').addEventListener('click', function () { log = []; renderLog(); });
+
+  /* ---------- challenge ---------- */
+  var target = null;
+  var TARGETS = [4.5, 5.0, 5.5, 6.5, 7.0, 7.5, 8.0, 8.5];
+  function updateChallengeStatus() {
+    if (target === null) { el.chStatus.textContent = ''; el.chStatus.className = 'challenge-status'; return; }
+    var diff = Math.abs(ph - target);
+    if (diff <= 0.2) { el.chStatus.textContent = 'On target. Record your reading.'; el.chStatus.className = 'challenge-status hit'; }
+    else { el.chStatus.textContent = 'Off by ' + diff.toFixed(1) + ' pH units'; el.chStatus.className = 'challenge-status'; }
+  }
+  document.getElementById('newChallenge').addEventListener('click', function () {
+    var next;
+    do { next = TARGETS[Math.floor(Math.random() * TARGETS.length)]; } while (next === target);
+    target = next;
+    el.chText.textContent = 'Challenge: move the meter to pH ' + target.toFixed(1) + ', then describe what you see in the leaves and roots.';
+    updateChallengeStatus();
+  });
+
+  renderLog();
+  render();
+})();
+</script>
+</body>
+</html>
